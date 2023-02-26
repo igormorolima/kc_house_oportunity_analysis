@@ -1,0 +1,149 @@
+pip install geopy
+
+# ==================
+# Bibliotecas
+# ==================
+import pandas as pd
+import numpy as np
+from geopy.geocoders import Nominatim
+import plotly.express as px
+
+# ==================
+# Functions
+# ==================
+def show_dimensions( data ):
+    print( 'Number of Rows:{}'.format( data.shape[0] ) )
+    print( 'Number of Columns {}'.format( data.shape[1] ) )
+
+    return None
+
+def descriptive_statistics( data ):
+    # descriptive statistics
+    num_attributes = data.select_dtypes( include=['int64', 'float64'] )
+    
+    # central tendency
+    media = pd.DataFrame( num_attributes.apply( np.mean ) )
+    mediana = pd.DataFrame( num_attributes.apply( np.median ) )
+    std = pd.DataFrame( num_attributes.apply( np.std ) )
+    
+    # dispersion
+    std = pd.DataFrame( num_attributes.apply( np.std ) )
+    max_ = pd.DataFrame( num_attributes.apply( np.max ) )
+    min_ = pd.DataFrame( num_attributes.apply( np.min ) )
+    
+    df1 = pd.concat( [max_, min_, media, mediana, std ], axis=1 ).reset_index()
+    df1.columns = ['attributes', 'mean', 'median', 'std', 'max', 'min']
+    
+    return df1
+
+def create_new_attributes( data, geodata=False ):
+    #Crie uma nova coluna chamada: “house_age”
+    data.loc[data['date'] > pd.to_datetime( '2014-01-01' ), 'house_age'] = 'new_house'
+    data.loc[data['date'] < pd.to_datetime( '2014-01-01' ), 'house_age'] = 'old_house'
+    
+    # Crie uma nova coluna chamada: “dormitory_type”
+    for i in range( len( data ) ):
+        if data.loc[i, 'bedrooms'] == 1:
+            data.loc[i, 'dormitory_type'] = 'studio'
+        
+        elif data.loc[i, 'bedrooms'] == 2:
+            data.loc[i, 'dormitory_type'] = 'apartment'
+        
+        else:
+            data.loc[i, 'dormitory_type'] = 'house'
+    
+    # define level of prices
+    for i in range( len( data ) ):
+        if data.loc[i, 'price'] <= 321950:
+            data.loc[i, 'level'] = 0
+        
+        elif ( data.loc[i,'price'] > 321950 ) & ( data.loc[i,'price'] <= 450000):
+            data.loc[i, 'level'] = 1
+        
+        elif ( data.loc[i,'price'] > 450000 ) & ( data.loc[i,'price'] <= 645000):
+            data.loc[i, 'level'] = 2
+        
+        else:
+            data.loc[i, 'level'] = 3
+       
+    if geodata == True:
+        # initializa API
+        geolocator = Nominatim( user_agent='geopiExercises' )
+        
+        # only 10 rows
+        data = data.head(20)
+        
+        # Create empty rows
+        data.loc[:, 'road'] = 'NA'
+        data.loc[:, 'house_number'] = 'NA'
+        data.loc[:, 'city'] = 'NA'
+        data.loc[:, 'county'] = 'NA'
+        data.loc[:, 'state'] = 'NA'
+
+        for i in range( len( data ) ):
+            print( 'Loop: {}/{}'.format( i, len( data ) ) )
+            # make request
+            query = str( data.loc[i, 'lat'] ) + ',' + str( data.loc[i, 'long'] )
+            response = geolocator.reverse( query )
+            
+            # parse data
+            if 'house_number' in response.raw['address']:
+                data.loc[i, 'house_number'] = response.raw['address']['house_number']
+        
+            if 'road' in response.raw['address']:
+                data.loc[i, 'road'] = response.raw['address']['road']
+            
+            if 'city' in response.raw['address']:
+                data.loc[i, 'city'] = response.raw['address']['city']
+            
+            if 'county' in response.raw['address']:
+                data.loc[i, 'county'] = response.raw['address']['county']
+            
+            if 'state' in response.raw['address']:
+                data.loc[i, 'state'] = response.raw['address']['state']
+            
+    return data
+
+def draw_map( data ):
+    # map
+    houses = data[['id', 'lat', 'long', 'price', 'level']].copy()
+    fig = px.scatter_mapbox( houses,
+                            lat="lat",
+                            lon="long",
+                            color="level",
+                            size="price",
+                            color_continuous_scale=px.colors.cyclical.IceFire,
+                            size_max=15,
+                            zoom=10)
+
+    fig.update_layout(mapbox_style="open-street-map")
+    fig.update_layout(height=600, margin={"r":0,"t":0,"l":0,"b":0})
+   
+    return fig
+   
+if __name__ == "__main__":
+    # ==================
+    # Extraction
+    # ==================
+    # load dataset
+    data = pd.read_csv( 'kc_house_data.csv' )
+    show_dimensions( data )
+    
+    # ==================
+    # Transformation
+    # ==================
+    # convert object to date
+    data['date'] = pd.to_datetime( data['date'] )
+    
+    # make descriptive analysis
+    descriptive_statistics( data )
+    
+    # create new attributes
+    create_new_attributes( data, geodata=False )
+    
+    # ==================
+    # Load
+    # ==================
+    # draw a map
+    fig = draw_map( data )
+    fig.show()
